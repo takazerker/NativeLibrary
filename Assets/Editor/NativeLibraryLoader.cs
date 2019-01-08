@@ -24,6 +24,8 @@ public class NativeLibraryLoader : ScriptableObject
     [System.Serializable]
     class Library
     {
+        const int MaxRetries = 3;
+
         public string ClassName;
         public string LibraryPath;
         public string CopyPath;
@@ -50,21 +52,37 @@ public class NativeLibraryLoader : ScriptableObject
                 return;
             }
 
-            // コピー名を決める
-            if (string.IsNullOrEmpty(CopyPath))
+            for (int t = MaxRetries; t > 0; --t)
             {
-                string libFileName = Path.GetFileName(LibraryPath);
-
-                do
+                // コピー名を決める
+                if (string.IsNullOrEmpty(CopyPath))
                 {
-                    System.Guid guid = System.Guid.NewGuid();
-                    CopyPath = "Temp/" + guid.ToString() + "-" + libFileName;
-                }
-                while (File.Exists(CopyPath));
-            }
+                    string libFileName = Path.GetFileName(LibraryPath);
 
-            // ファイルのコピー
-            File.Copy(LibraryPath, CopyPath, true);
+                    do
+                    {
+                        System.Guid guid = System.Guid.NewGuid();
+                        CopyPath = "Temp/" + guid.ToString() + "-" + libFileName;
+                    }
+                    while (File.Exists(CopyPath));
+                }
+
+                // ファイルのコピー
+                try
+                {
+                    File.Copy(LibraryPath, CopyPath, true);
+                    break;
+                }
+                catch (System.Exception e)
+                {
+                    CopyPath = null;
+
+                    if (t == 1)
+                    {
+                        Debug.LogException(e);
+                    }
+                }
+            }
 
             // コピー先から読み込み
             Module = LoadLibrary(CopyPath);
@@ -185,6 +203,11 @@ public class NativeLibraryLoader : ScriptableObject
     // 更新処理
     void OnUpdate()
     {
+        if (EditorApplication.isCompiling)
+        {
+            return;
+        }
+
         for (int i = 0; i < mLibraries.Count; ++i)
         {
             if (mLibraries[i].HotReload)
